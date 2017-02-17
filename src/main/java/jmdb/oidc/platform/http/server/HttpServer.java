@@ -1,35 +1,42 @@
 package jmdb.oidc.platform.http.server;
 
+import jmdb.oidc.platform.collections.Maps;
 import jmdb.oidc.platform.http.server.redirection.Redirection;
 import jmdb.oidc.platform.jmdb.oidc.platform.io.SystemProcess;
-import jmdb.oidc.platform.logging.LogbackConfiguration;
-import org.eclipse.jetty.io.RuntimeIOException;
-import org.eclipse.jetty.security.*;
-import org.eclipse.jetty.security.authentication.DigestAuthenticator;
+import org.eclipse.jetty.security.Authenticator;
+import org.eclipse.jetty.security.ConstraintMapping;
+import org.eclipse.jetty.security.ConstraintSecurityHandler;
+import org.eclipse.jetty.security.LoginService;
 import org.eclipse.jetty.server.Handler;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.handler.ContextHandler;
 import org.eclipse.jetty.server.handler.ErrorHandler;
 import org.eclipse.jetty.server.handler.HandlerList;
 import org.eclipse.jetty.server.handler.ResourceHandler;
+import org.eclipse.jetty.server.session.SessionHandler;
 import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.eclipse.jetty.util.security.Constraint;
+import org.jetbrains.annotations.NotNull;
+import org.keycloak.adapters.jetty.KeycloakJettyAuthenticator;
+import org.keycloak.representations.adapters.config.AdapterConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.servlet.Servlet;
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
+import java.util.stream.Stream;
 
-import static ch.qos.logback.classic.Level.DEBUG;
 import static java.lang.String.format;
 import static java.lang.System.getProperty;
 import static java.net.InetAddress.getLocalHost;
 import static java.util.Arrays.asList;
-import static jmdb.oidc.platform.logging.LogbackConfiguration.STANDARD_OPS_FORMAT;
+import static java.util.Collections.unmodifiableMap;
+import static java.util.stream.Stream.of;
+import static jmdb.oidc.platform.collections.Maps.entriesToMap;
+import static jmdb.oidc.platform.collections.Maps.entry;
 import static org.eclipse.jetty.servlet.ServletContextHandler.NO_SESSIONS;
 
 public class HttpServer {
@@ -102,9 +109,44 @@ public class HttpServer {
 
         handlerList.setHandlers(handlers);
 
+        ConstraintSecurityHandler securityHandler = createSecurityHandler(this.serverName, authenticator(), loginService());
 
-        return handlerList;
+        securityHandler.setHandler(handlerList);
+
+        SessionHandler sessionHandler = createSessionHandler();
+        sessionHandler.setHandler(securityHandler);
+
+        return sessionHandler;
     }
+
+    @NotNull
+    private SessionHandler createSessionHandler() {
+        return new SessionHandler();
+    }
+
+    /**
+     * You get these variables from the installation config in your client config in the
+     * keycloak admin app
+     */
+    private Authenticator authenticator() {
+        KeycloakJettyAuthenticator authenticator =  new KeycloakJettyAuthenticator();
+        AdapterConfig config = new AdapterConfig();
+        config.setRealm("test-realm");
+        config.setAuthServerUrl("http://localhost:8080/auth");
+        config.setSslRequired("external");
+        config.setResource("test-client");
+
+        config.setCredentials(unmodifiableMap(of(
+            entry("secret", "6b0f7d59-283d-4afe-b13e-747158d84086")).collect(entriesToMap())));
+
+        authenticator.setAdapterConfig(config);
+        return authenticator;
+    }
+
+    private LoginService loginService() {
+        return null;
+    }
+
 
     private Handler redirectionHandler() {
         return new RedirectionHandler(redirections);
@@ -115,7 +157,7 @@ public class HttpServer {
         resourceHandler.setResourceBase(webrootDir);
 
         resourceHandler.setDirectoriesListed(true);
-        ContextHandler contextHandler= new ContextHandler("/");
+        ContextHandler contextHandler = new ContextHandler("/");
         contextHandler.setHandler(resourceHandler);
 
 
@@ -138,7 +180,31 @@ public class HttpServer {
         return servletContextHandler;
     }
 
+    private static ConstraintSecurityHandler createSecurityHandler(String serverName,
+                                                                   Authenticator authenticator,
+                                                                   LoginService loginService) {
+        Constraint constraint = new Constraint();
+        constraint.setName(Constraint.__BASIC_AUTH);
+        constraint.setAuthenticate(true);
+        constraint.setRoles(new String[]{"sysadmin"});
 
+
+        ConstraintMapping rootConstraint = mapConstraintTo(constraint, "/sysadmin/*");
+
+        ConstraintSecurityHandler handler = new ConstraintSecurityHandler();
+        handler.setRealmName(serverName);
+        handler.setAuthenticator(authenticator);
+        handler.setConstraintMappings(asList(rootConstraint));
+        handler.setLoginService(loginService);
+        return handler;
+    }
+
+    private static ConstraintMapping mapConstraintTo(Constraint constraint, String path) {
+        ConstraintMapping cm = new ConstraintMapping();
+        cm.setPathSpec(path);
+        cm.setConstraint(constraint);
+        return cm;
+    }
 
 
     private File getCannonicalFileFor(String fileName) {
