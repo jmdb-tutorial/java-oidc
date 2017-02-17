@@ -1,6 +1,5 @@
 package jmdb.oidc.platform.http.server;
 
-import jmdb.oidc.platform.collections.Maps;
 import jmdb.oidc.platform.http.server.redirection.Redirection;
 import jmdb.oidc.platform.jmdb.oidc.platform.io.SystemProcess;
 import org.eclipse.jetty.security.Authenticator;
@@ -27,7 +26,6 @@ import javax.servlet.Servlet;
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
-import java.util.stream.Stream;
 
 import static java.lang.String.format;
 import static java.lang.System.getProperty;
@@ -50,8 +48,6 @@ public class HttpServer {
     private int httpPort;
     private String webrootDir;
     private List<Redirection> redirections = new ArrayList<Redirection>();
-    private ConstraintSecurityHandler securityCloak;
-    private String sassRoot;
 
 
     public HttpServer(Class serverClass, int port, Servlet rootServlet) {
@@ -109,18 +105,18 @@ public class HttpServer {
 
         handlerList.setHandlers(handlers);
 
-        ConstraintSecurityHandler securityHandler = createSecurityHandler(this.serverName, authenticator(), loginService());
+        ConstraintSecurityHandler securityHandler = securityHandler(this.serverName, authenticator(), loginService());
 
         securityHandler.setHandler(handlerList);
 
-        SessionHandler sessionHandler = createSessionHandler();
+        SessionHandler sessionHandler = sessionHandler();
         sessionHandler.setHandler(securityHandler);
 
         return sessionHandler;
     }
 
     @NotNull
-    private SessionHandler createSessionHandler() {
+    private static SessionHandler sessionHandler() {
         return new SessionHandler();
     }
 
@@ -180,9 +176,9 @@ public class HttpServer {
         return servletContextHandler;
     }
 
-    private static ConstraintSecurityHandler createSecurityHandler(String serverName,
-                                                                   Authenticator authenticator,
-                                                                   LoginService loginService) {
+    private static ConstraintSecurityHandler securityHandler(String serverName,
+                                                             Authenticator authenticator,
+                                                             LoginService loginService) {
         Constraint constraint = new Constraint();
         constraint.setName(Constraint.__BASIC_AUTH);
         constraint.setAuthenticate(true);

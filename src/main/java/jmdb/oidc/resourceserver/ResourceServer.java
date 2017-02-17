@@ -3,6 +3,7 @@ package jmdb.oidc.resourceserver;
 import jmdb.oidc.platform.http.server.HttpServer;
 import jmdb.oidc.platform.logging.LogbackConfiguration;
 
+import static ch.qos.logback.classic.Level.DEBUG;
 import static ch.qos.logback.classic.Level.INFO;
 import static jmdb.oidc.platform.logging.LogbackConfiguration.STANDARD_OPS_FORMAT;
 
